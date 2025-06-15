@@ -2,196 +2,139 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Shared Countdown Timer</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Supabase Shared Timer</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
-    html, body {
-      margin: 0;
-      padding: 0;
-      height: 100%;
-      background-color: black;
-      color: white;
-      font-family: 'Arial', sans-serif;
-    }
-
-    .container {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      height: 100%;
-      padding: 1rem;
-      box-sizing: border-box;
-    }
-
-    .display {
-      font-size: 12vw;
-      text-align: center;
-      margin-bottom: 2rem;
-    }
-
-    .rotated {
-      transform: rotate(90deg);
-      transform-origin: center;
-    }
-
-    button, input {
-      font-size: 1rem;
-      padding: 0.5rem 1rem;
-      margin: 0.5rem;
-    }
-
-    input[type="number"] {
-      width: 80px;
-    }
-
-    .link {
-      font-size: 0.8rem;
-      margin-top: 1rem;
-      word-break: break-word;
-      text-align: center;
-      color: lightgray;
-    }
-
-    .hidden {
-      display: none;
-    }
-
-    .white-button {
-      background: white;
-      color: black;
-      border: none;
-      border-radius: 0.4rem;
-    }
+    body { background: black; color: white; font-family: sans-serif; text-align: center; margin: 0; height: 100vh; display: flex; flex-direction: column; justify-content: center; }
+    #timer { font-size: 15vw; }
+    #controls { margin-top: 20px; }
+    input, button { font-size: 1.5rem; margin: 0 10px; }
   </style>
 </head>
 <body>
-  <div class="container" id="app">
-    <div class="display" id="timer">--:--</div>
-
-    <div id="controls">
-      <div>
-        <button onclick="togglePause()" id="pauseBtn" class="white-button">▶️ Start</button>
-        <button onclick="resetTimer()" class="white-button">🔄 Reset</button>
-      </div>
-      <div>
-        <input type="number" id="minutes" min="1" value="5" /> min
-        <button onclick="changeDuration()" class="white-button">Set</button>
-      </div>
-      <div class="link" id="share-link"></div>
-    </div>
+  <div id="timer">--:--</div>
+  <div id="controls">
+    <input id="minutes" type="number" min="1" value="5" /> min
+    <button id="startBtn">▶️ Start</button>
+    <button id="resetBtn">🔄 Reset</button>
   </div>
 
   <script>
-    const params = new URLSearchParams(location.search);
-    const id = params.get("id") || "default";
-    const view = params.get("view");
-    const rotate = params.get("rotate");
-    const storageKey = `shared-timer-${id}`;
-    const isDisplay = view === "display";
+    const SUPABASE_URL = 'YOUR_SUPABASE_URL';
+    const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
 
-    const timerEl = document.getElementById("timer");
-    const pauseBtn = document.getElementById("pauseBtn");
-    const minutesInput = document.getElementById("minutes");
-    const shareLinkEl = document.getElementById("share-link");
-    const controlsEl = document.getElementById("controls");
-    const appEl = document.getElementById("app");
+    const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    const TIMER_ID = 'focus';  // your shared timer id
 
-    let timerData = {
-      duration: 5 * 60 * 1000, // ms
-      endTime: null,
-      paused: true
+    const timerEl = document.getElementById('timer');
+    const minutesInput = document.getElementById('minutes');
+    const startBtn = document.getElementById('startBtn');
+    const resetBtn = document.getElementById('resetBtn');
+
+    let timerInterval = null;
+    let endTime = null;
+
+    // Convert milliseconds to MM:SS format
+    function formatTime(ms) {
+      if (ms <= 0) return "--:--";
+      const totalSeconds = Math.floor(ms / 1000);
+      const minutes = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
+      const seconds = (totalSeconds % 60).toString().padStart(2, '0');
+      return `${minutes}:${seconds}`;
+    }
+
+    async function fetchTimer() {
+      const { data, error } = await supabase
+        .from('timers')
+        .select('*')
+        .eq('id', TIMER_ID)
+        .single();
+
+      if (data && data.start_at && data.seconds) {
+        const start = new Date(data.start_at).getTime();
+        endTime = start + data.seconds * 1000;
+      } else {
+        endTime = null;
+      }
+      updateTimerDisplay();
+    }
+
+    function updateTimerDisplay() {
+      if (!endTime) {
+        timerEl.textContent = "--:--";
+        clearInterval(timerInterval);
+        return;
+      }
+      const now = Date.now();
+      const remaining = endTime - now;
+      timerEl.textContent = formatTime(remaining);
+
+      if (remaining <= 0) {
+        clearInterval(timerInterval);
+      }
+    }
+
+    // Start countdown interval
+    function startInterval() {
+      clearInterval(timerInterval);
+      timerInterval = setInterval(updateTimerDisplay, 250);
+    }
+
+    // Listen for real-time changes on timers table
+    supabase
+      .channel('public:timers')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'timers', filter: `id=eq.${TIMER_ID}` },
+        payload => {
+          const newData = payload.new;
+          if (newData.start_at && newData.seconds) {
+            const start = new Date(newData.start_at).getTime();
+            endTime = start + newData.seconds * 1000;
+            startInterval();
+            updateTimerDisplay();
+          }
+        }
+      )
+      .subscribe();
+
+    // On load, fetch current timer
+    fetchTimer();
+
+    // Start button sets timer start
+    startBtn.onclick = async () => {
+      const seconds = parseInt(minutesInput.value, 10) * 60;
+      if (seconds <= 0) return alert("Please enter a positive number.");
+
+      const nowISO = new Date().toISOString();
+
+      // Upsert timer record
+      const { error } = await supabase
+        .from('timers')
+        .upsert({ id: TIMER_ID, seconds: seconds, start_at: nowISO });
+
+      if (error) console.error(error);
+      else {
+        endTime = Date.now() + seconds * 1000;
+        startInterval();
+        updateTimerDisplay();
+      }
     };
 
-    function save() {
-      localStorage.setItem(storageKey, JSON.stringify(timerData));
-    }
+    // Reset button clears timer
+    resetBtn.onclick = async () => {
+      const { error } = await supabase
+        .from('timers')
+        .delete()
+        .eq('id', TIMER_ID);
 
-    function load() {
-      const data = localStorage.getItem(storageKey);
-      if (data) {
-        try {
-          timerData = JSON.parse(data);
-        } catch (e) {}
+      if (error) console.error(error);
+      else {
+        endTime = null;
+        updateTimerDisplay();
       }
-    }
-
-    function formatTime(ms) {
-      const totalSec = Math.max(0, Math.floor(ms / 1000));
-      const mins = String(Math.floor(totalSec / 60)).padStart(2, '0');
-      const secs = String(totalSec % 60).padStart(2, '0');
-      return `${mins}:${secs}`;
-    }
-
-    function updateDisplay() {
-      load();
-      if (timerData.paused) {
-        const remaining = timerData.endTime ? timerData.endTime - Date.now() : timerData.duration;
-        timerEl.textContent = formatTime(remaining);
-        if (pauseBtn) pauseBtn.textContent = "▶️ Start";
-      } else {
-        const remaining = timerData.endTime - Date.now();
-        if (remaining <= 0) {
-          timerEl.textContent = "00:00";
-          timerData.paused = true;
-          timerData.endTime = null;
-          save();
-        } else {
-          timerEl.textContent = formatTime(remaining);
-        }
-        if (pauseBtn) pauseBtn.textContent = "⏸ Pause";
-      }
-    }
-
-    function togglePause() {
-      load();
-      if (timerData.paused) {
-        timerData.endTime = Date.now() + (timerData.duration || 0);
-        timerData.paused = false;
-      } else {
-        const remaining = timerData.endTime - Date.now();
-        timerData.duration = remaining;
-        timerData.endTime = null;
-        timerData.paused = true;
-      }
-      save();
-      updateDisplay();
-    }
-
-    function resetTimer() {
-      const minutes = parseInt(minutesInput.value) || 5;
-      timerData.duration = minutes * 60 * 1000;
-      timerData.endTime = null;
-      timerData.paused = true;
-      save();
-      updateDisplay();
-    }
-
-    function changeDuration() {
-      resetTimer(); // same logic
-    }
-
-    function initUI() {
-      if (isDisplay) {
-        controlsEl.classList.add("hidden");
-        if (rotate === "90") {
-          timerEl.classList.add("rotated");
-        }
-      } else {
-        const cleanUrl = `${location.origin}${location.pathname}?id=${id}&view=display`;
-        const rotUrl = cleanUrl + "&rotate=90";
-        shareLinkEl.innerHTML = `
-          <strong>Shareable Display:</strong><br>
-          <a href="${cleanUrl}" style="color:lightblue">${cleanUrl}</a><br>
-          Upright: <a href="${rotUrl}" style="color:lightblue">${rotUrl}</a>
-        `;
-      }
-    }
-
-    initUI();
-    setInterval(updateDisplay, 500);
-    load();
-    updateDisplay();
+    };
   </script>
 </body>
 </html>
