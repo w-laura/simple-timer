@@ -1,268 +1,152 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Shared Supabase Timer</title>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
-<style>
-  body {
-    background: black;
-    color: white;
-    font-family: sans-serif;
-    margin: 0;
-    height: 100vh;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    text-align: center;
-    transition: transform 0.3s ease;
-  }
-  #timer {
-    font-size: 15vw;
-    user-select: none;
-  }
-  #controls {
-    margin-top: 20px;
-  }
-  input, button {
-    font-size: 1.5rem;
-    margin: 0 10px;
-  }
-  /* Rotate if ?rotate=1 */
-  .rotate90 {
-    transform: rotate(90deg);
-    justify-content: flex-start;
-    padding-top: 10vh;
-  }
-  .rotate90 #timer {
-    font-size: 20vw;
-    margin-top: 0;
-  }
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Shared Countdown Timer</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
+  <style>
+    body {
+      margin: 0;
+      background: black;
+      color: white;
+      font-family: sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      transform: rotate(var(--rotation));
+    }
+    #timer {
+      font-size: 15vw;
+      margin-bottom: 2rem;
+    }
+    #controls {
+      display: flex;
+      gap: 1rem;
+    }
+    button, input {
+      font-size: 1.5rem;
+    }
+    #controls.hidden {
+      display: none;
+    }
+  </style>
 </head>
 <body>
   <div id="timer">--:--</div>
   <div id="controls">
-    <input id="minutes" type="number" min="1" value="5" /> min
+    <input type="number" id="minutes" value="5" min="1" /> min
     <button id="startBtn">▶️ Start</button>
-    <button id="pauseBtn" disabled>⏸ Pause</button>
+    <button id="pauseBtn">⏸️ Pause</button>
     <button id="resetBtn">🔄 Reset</button>
   </div>
 
-<script>
-  const SUPABASE_URL = 'https://keymiryybvqksaxkjdan.supabase.co'; // replace with your URL
-  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtleW1pcnl5YnZxa3NheGtqZGFuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTAwMDIyMzUsImV4cCI6MjA2NTU3ODIzNX0.qhDDnLTMGDzNYHA77c9yEHsH8zozECggGwKev4FMzNU'; // replace with your anon key
-  const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  <script>
+    const SUPABASE_URL = 'https://keymiryybvqksaxkjdan.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtleW1pcnl5YnZxa3NheGtqZGFuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTAwMDIyMzUsImV4cCI6MjA2NTU3ODIzNX0.qhDDnLTMGDzNYHA77c9yEHsH8zozECggGwKev4FMzNU';
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-  const urlParams = new URLSearchParams(window.location.search);
-  const TIMER_ID = urlParams.get('id') || 'default';
-  const ROTATE = urlParams.get('rotate') === '1';
+    const urlParams = new URLSearchParams(window.location.search);
+    const TIMER_ID = urlParams.get('id') || 'default';
+    const ROTATE = urlParams.get('rotate') === 'true';
 
-  const timerEl = document.getElementById('timer');
-  const minutesInput = document.getElementById('minutes');
-  const startBtn = document.getElementById('startBtn');
-  const pauseBtn = document.getElementById('pauseBtn');
-  const resetBtn = document.getElementById('resetBtn');
-
-  if (ROTATE) {
-    document.body.classList.add('rotate90');
-  }
-
-  let timer = null; // will hold timer data from supabase
-  let intervalId = null;
-  let remainingSeconds = 0;
-  let isRunning = false;
-
-  async function getOrCreateTimer(id) {
-    // Try fetching existing timer
-    const { data, error } = await supabase
-      .from('timers')
-      .select('*')
-      .eq('id', id)
-      .limit(1)
-      .single();
-
-    if (error && error.code === 'PGRST116') {
-      // No rows found - create default timer
-      const defaultDuration = 300; // 5 minutes in seconds
-      const insertRes = await supabase
-        .from('timers')
-        .insert([{ id, start_at: null, paused_at: null, duration: defaultDuration }])
-        .select()
-        .single();
-
-      if (insertRes.error) {
-        console.error('Error creating timer:', insertRes.error);
-        return null;
-      }
-      return insertRes.data;
-    } else if (error) {
-      console.error('Error fetching timer:', error);
-      return null;
-    }
-
-    return data;
-  }
-
-  // Format seconds as MM:SS
-  function formatTime(seconds) {
-    if (seconds < 0) seconds = 0;
-    const m = Math.floor(seconds / 60).toString().padStart(2, '0');
-    const s = (seconds % 60).toString().padStart(2, '0');
-    return `${m}:${s}`;
-  }
-
-  // Update timer display
-  function updateDisplay() {
-    timerEl.textContent = formatTime(remainingSeconds);
-  }
-
-  // Calculate remaining seconds based on timer data
-  function calculateRemaining(timer) {
-    if (!timer.start_at) return timer.duration;
-
-    const start = new Date(timer.start_at).getTime();
-    let elapsed = 0;
-
-    if (timer.paused_at) {
-      const paused = new Date(timer.paused_at).getTime();
-      elapsed = (paused - start) / 1000;
+    if (ROTATE) {
+      document.body.style.setProperty('--rotation', '90deg');
     } else {
-      elapsed = (Date.now() - start) / 1000;
+      document.body.style.setProperty('--rotation', '0deg');
     }
 
-    return Math.max(0, Math.round(timer.duration - elapsed));
-  }
+    const timerEl = document.getElementById('timer');
+    const minutesInput = document.getElementById('minutes');
+    const startBtn = document.getElementById('startBtn');
+    const pauseBtn = document.getElementById('pauseBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const controlsEl = document.getElementById('controls');
 
-  // Load timer data from DB and update UI
-  async function loadTimer() {
-    timer = await getOrCreateTimer(TIMER_ID);
-    if (!timer) {
-      timerEl.textContent = 'Error loading timer';
-      startBtn.disabled = true;
-      pauseBtn.disabled = true;
-      resetBtn.disabled = true;
-      return;
-    }
-    remainingSeconds = calculateRemaining(timer);
-    updateDisplay();
+    let endTime = null;
+    let timerInterval = null;
 
-    // Enable/disable buttons based on state
-    isRunning = timer.start_at && !timer.paused_at && remainingSeconds > 0;
-    startBtn.disabled = isRunning;
-    pauseBtn.disabled = !isRunning;
-    minutesInput.value = Math.floor(timer.duration / 60);
-
-    if (intervalId) clearInterval(intervalId);
-    if (isRunning) startCountdown();
-  }
-
-  async function startCountdown() {
-    if (intervalId) clearInterval(intervalId);
-
-    isRunning = true;
-    startBtn.disabled = true;
-    pauseBtn.disabled = false;
-    minutesInput.disabled = true;
-
-    // Save start time (now) and clear paused_at
-    const nowISO = new Date().toISOString();
-    const { error } = await supabase
-      .from('timers')
-      .update({ start_at: nowISO, paused_at: null, duration: remainingSeconds })
-      .eq('id', TIMER_ID);
-
-    if (error) {
-      console.error('Error starting timer:', error);
-      return;
-    }
-
-    intervalId = setInterval(() => {
-      remainingSeconds--;
-      updateDisplay();
-      if (remainingSeconds <= 0) {
-        clearInterval(intervalId);
-        isRunning = false;
-        startBtn.disabled = false;
-        pauseBtn.disabled = true;
-        minutesInput.disabled = false;
-      }
-    }, 1000);
-  }
-
-  async function pauseCountdown() {
-    if (!isRunning) return;
-    isRunning = false;
-    startBtn.disabled = false;
-    pauseBtn.disabled = true;
-    minutesInput.disabled = false;
-    clearInterval(intervalId);
-
-    // Save paused_at with current time, update duration remaining
-    const nowISO = new Date().toISOString();
-    const { error } = await supabase
-      .from('timers')
-      .update({ paused_at: nowISO, duration: remainingSeconds })
-      .eq('id', TIMER_ID);
-
-    if (error) {
-      console.error('Error pausing timer:', error);
-    }
-  }
-
-  async function resetCountdown() {
-    isRunning = false;
-    clearInterval(intervalId);
-    const newDuration = parseInt(minutesInput.value, 10) * 60 || 300;
-    remainingSeconds = newDuration;
-    updateDisplay();
-    startBtn.disabled = false;
-    pauseBtn.disabled = true;
-    minutesInput.disabled = false;
-
-    // Reset DB fields
-    const { error } = await supabase
-      .from('timers')
-      .update({ start_at: null, paused_at: null, duration: newDuration })
-      .eq('id', TIMER_ID);
-
-    if (error) {
-      console.error('Error resetting timer:', error);
-    }
-  }
-
-  // Event Listeners
-  startBtn.addEventListener('click', startCountdown);
-  pauseBtn.addEventListener('click', pauseCountdown);
-  resetBtn.addEventListener('click', resetCountdown);
-
-  // Initial load
-  loadTimer();
-
-  // Poll DB every 3 seconds to sync (optional)
-  setInterval(async () => {
-    if (!isRunning) {
-      const { data, error } = await supabase
+    async function fetchTimer() {
+      const { data } = await supabase
         .from('timers')
         .select('*')
         .eq('id', TIMER_ID)
-        .limit(1)
         .single();
 
-      if (!error && data) {
-        timer = data;
-        remainingSeconds = calculateRemaining(timer);
-        updateDisplay();
-        isRunning = timer.start_at && !timer.paused_at && remainingSeconds > 0;
-        startBtn.disabled = isRunning;
-        pauseBtn.disabled = !isRunning;
-        minutesInput.value = Math.floor(timer.duration / 60);
+      if (data && data.start_at && data.duration) {
+        if (data.paused_at) {
+          endTime = null;
+          updateTimerDisplay(remainingTime(data.start_at, data.duration, data.paused_at));
+        } else {
+          const start = new Date(data.start_at).getTime();
+          endTime = start + data.duration * 1000;
+          startInterval();
+        }
+      } else {
+        timerEl.textContent = '--:--';
       }
     }
-  }, 3000);
 
-</script>
+    function remainingTime(startAt, duration, pausedAt = null) {
+      const now = pausedAt ? new Date(pausedAt).getTime() : Date.now();
+      const start = new Date(startAt).getTime();
+      return Math.max(0, duration - Math.floor((now - start) / 1000));
+    }
+
+    function updateTimerDisplay(seconds = null) {
+      const secs = seconds !== null
+        ? seconds
+        : Math.max(0, Math.floor((endTime - Date.now()) / 1000));
+      const mins = String(Math.floor(secs / 60)).padStart(2, '0');
+      const sec = String(secs % 60).padStart(2, '0');
+      timerEl.textContent = `${mins}:${sec}`;
+    }
+
+    function startInterval() {
+      if (timerInterval) clearInterval(timerInterval);
+      timerInterval = setInterval(updateTimerDisplay, 1000);
+      updateTimerDisplay();
+    }
+
+    startBtn.onclick = async () => {
+      const minutes = parseInt(minutesInput.value, 10) || 5;
+      const duration = minutes * 60;
+      const start_at = new Date().toISOString();
+      const { error } = await supabase.from('timers').upsert([
+        { id: TIMER_ID, start_at, duration, paused_at: null }
+      ]);
+      if (!error) fetchTimer();
+    };
+
+    pauseBtn.onclick = async () => {
+      const { error } = await supabase
+        .from('timers')
+        .update({ paused_at: new Date().toISOString() })
+        .eq('id', TIMER_ID);
+      if (!error) fetchTimer();
+    };
+
+    resetBtn.onclick = async () => {
+      const { error } = await supabase
+        .from('timers')
+        .update({ start_at: null, paused_at: null })
+        .eq('id', TIMER_ID);
+      if (!error) {
+        endTime = null;
+        clearInterval(timerInterval);
+        timerEl.textContent = '--:--';
+      }
+    };
+
+    fetchTimer();
+    setInterval(fetchTimer, 5000); // keep polling for sync
+
+    // Hide controls on display-only view (e.g., on remote screen)
+    if (!urlParams.has('controls') && ROTATE) {
+      controlsEl.classList.add('hidden');
+    }
+  </script>
 </body>
 </html>
