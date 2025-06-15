@@ -46,7 +46,8 @@
   <script>
     const SUPABASE_URL = 'https://keymiryybvqksaxkjdan.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtleW1pcnl5YnZxa3NheGtqZGFuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTAwMDIyMzUsImV4cCI6MjA2NTU3ODIzNX0.qhDDnLTMGDzNYHA77c9yEHsH8zozECggGwKev4FMzNU';
-    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
     const urlParams = new URLSearchParams(window.location.search);
     const TIMER_ID = urlParams.get('id') || 'default';
@@ -69,16 +70,24 @@
     let timerInterval = null;
 
     async function fetchTimer() {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('timers')
         .select('*')
         .eq('id', TIMER_ID)
         .single();
 
+      if (error) {
+        console.error('Error fetching timer:', error);
+        timerEl.textContent = '--:--';
+        return;
+      }
+
       if (data && data.start_at && data.duration) {
         if (data.paused_at) {
           endTime = null;
-          updateTimerDisplay(remainingTime(data.start_at, data.duration, data.paused_at));
+          const remaining = remainingTime(data.start_at, data.duration, data.paused_at);
+          updateTimerDisplay(remaining);
+          clearInterval(timerInterval);
         } else {
           const start = new Date(data.start_at).getTime();
           endTime = start + data.duration * 1000;
@@ -86,6 +95,8 @@
         }
       } else {
         timerEl.textContent = '--:--';
+        clearInterval(timerInterval);
+        endTime = null;
       }
     }
 
@@ -106,7 +117,12 @@
 
     function startInterval() {
       if (timerInterval) clearInterval(timerInterval);
-      timerInterval = setInterval(updateTimerDisplay, 1000);
+      timerInterval = setInterval(() => {
+        updateTimerDisplay();
+        if (endTime && Date.now() >= endTime) {
+          clearInterval(timerInterval);
+        }
+      }, 1000);
       updateTimerDisplay();
     }
 
@@ -114,10 +130,16 @@
       const minutes = parseInt(minutesInput.value, 10) || 5;
       const duration = minutes * 60;
       const start_at = new Date().toISOString();
+
       const { error } = await supabase.from('timers').upsert([
         { id: TIMER_ID, start_at, duration, paused_at: null }
       ]);
-      if (!error) fetchTimer();
+
+      if (error) {
+        console.error('Error creating/updating timer:', error);
+      } else {
+        fetchTimer();
+      }
     };
 
     pauseBtn.onclick = async () => {
@@ -125,15 +147,24 @@
         .from('timers')
         .update({ paused_at: new Date().toISOString() })
         .eq('id', TIMER_ID);
-      if (!error) fetchTimer();
+
+      if (error) {
+        console.error('Error pausing timer:', error);
+      } else {
+        fetchTimer();
+      }
     };
 
     resetBtn.onclick = async () => {
+      // Delete the timer row to avoid NOT NULL issues on start_at
       const { error } = await supabase
         .from('timers')
-        .update({ start_at: null, paused_at: null })
+        .delete()
         .eq('id', TIMER_ID);
-      if (!error) {
+
+      if (error) {
+        console.error('Error resetting timer:', error);
+      } else {
         endTime = null;
         clearInterval(timerInterval);
         timerEl.textContent = '--:--';
