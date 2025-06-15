@@ -54,8 +54,8 @@
 <script>
   const SUPABASE_URL = 'https://keymiryybvqksaxkjdan.supabase.co'; // replace with your URL
   const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtleW1pcnl5YnZxa3NheGtqZGFuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTAwMDIyMzUsImV4cCI6MjA2NTU3ODIzNX0.qhDDnLTMGDzNYHA77c9yEHsH8zozECggGwKev4FMzNU'; // replace with your anon key
-  const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
+  const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  
   const urlParams = new URLSearchParams(window.location.search);
   const TIMER_ID = urlParams.get('id') || 'default';
   const ROTATE = urlParams.get('rotate') === '1';
