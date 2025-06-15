@@ -25,116 +25,53 @@
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtleW1pcnl5YnZxa3NheGtqZGFuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTAwMDIyMzUsImV4cCI6MjA2NTU3ODIzNX0.qhDDnLTMGDzNYHA77c9yEHsH8zozECggGwKev4FMzNU';
 
     const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-    const TIMER_ID = 'focus';  // your shared timer id
-
+    const TIMER_ID = 'focus';
+  
     const timerEl = document.getElementById('timer');
-    const minutesInput = document.getElementById('minutes');
-    const startBtn = document.getElementById('startBtn');
-    const resetBtn = document.getElementById('resetBtn');
-
-    let timerInterval = null;
     let endTime = null;
-
-    // Convert milliseconds to MM:SS format
-    function formatTime(ms) {
-      if (ms <= 0) return "--:--";
-      const totalSeconds = Math.floor(ms / 1000);
-      const minutes = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
-      const seconds = (totalSeconds % 60).toString().padStart(2, '0');
-      return `${minutes}:${seconds}`;
-    }
-
+    let timerInterval = null;
+  
     async function fetchTimer() {
       const { data, error } = await supabase
         .from('timers')
         .select('*')
         .eq('id', TIMER_ID)
         .single();
-
+  
+      console.log("fetchTimer data:", data);
+      console.log("fetchTimer error:", error);
+  
       if (data && data.start_at && data.seconds) {
         const start = new Date(data.start_at).getTime();
         endTime = start + data.seconds * 1000;
+        startInterval();
       } else {
         endTime = null;
+        updateTimerDisplay();
       }
-      updateTimerDisplay();
     }
-
+  
     function updateTimerDisplay() {
       if (!endTime) {
-        timerEl.textContent = "--:--";
-        clearInterval(timerInterval);
+        timerEl.textContent = '--:--';
         return;
       }
+  
       const now = Date.now();
-      const remaining = endTime - now;
-      timerEl.textContent = formatTime(remaining);
-
-      if (remaining <= 0) {
-        clearInterval(timerInterval);
-      }
+      const remaining = Math.max(0, endTime - now);
+      const mins = String(Math.floor(remaining / 60000)).padStart(2, '0');
+      const secs = String(Math.floor((remaining % 60000) / 1000)).padStart(2, '0');
+  
+      timerEl.textContent = `${mins}:${secs}`;
     }
-
-    // Start countdown interval
+  
     function startInterval() {
-      clearInterval(timerInterval);
-      timerInterval = setInterval(updateTimerDisplay, 250);
+      if (timerInterval) clearInterval(timerInterval);
+      timerInterval = setInterval(updateTimerDisplay, 1000);
+      updateTimerDisplay(); // call immediately
     }
-
-    // Listen for real-time changes on timers table
-    supabase
-      .channel('public:timers')
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'timers', filter: `id=eq.${TIMER_ID}` },
-        payload => {
-          const newData = payload.new;
-          if (newData.start_at && newData.seconds) {
-            const start = new Date(newData.start_at).getTime();
-            endTime = start + newData.seconds * 1000;
-            startInterval();
-            updateTimerDisplay();
-          }
-        }
-      )
-      .subscribe();
-
-    // On load, fetch current timer
-    fetchTimer();
-
-    // Start button sets timer start
-    startBtn.onclick = async () => {
-      const seconds = parseInt(minutesInput.value, 10) * 60;
-      if (seconds <= 0) return alert("Please enter a positive number.");
-
-      const nowISO = new Date().toISOString();
-
-      // Upsert timer record
-      const { error } = await supabase
-        .from('timers')
-        .upsert({ id: TIMER_ID, seconds: seconds, start_at: nowISO });
-
-      if (error) console.error(error);
-      else {
-        endTime = Date.now() + seconds * 1000;
-        startInterval();
-        updateTimerDisplay();
-      }
-    };
-
-    // Reset button clears timer
-    resetBtn.onclick = async () => {
-      const { error } = await supabase
-        .from('timers')
-        .delete()
-        .eq('id', TIMER_ID);
-
-      if (error) console.error(error);
-      else {
-        endTime = null;
-        updateTimerDisplay();
-      }
-    };
+  
+    fetchTimer(); // load on start
   </script>
 </body>
 </html>
