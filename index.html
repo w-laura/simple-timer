@@ -34,30 +34,31 @@
     }
     button {
       padding: 0.5rem 1rem;
-      margin-top: 1rem;
+      margin: 0.3rem;
       font-size: 1rem;
       border: none;
       border-radius: 0.5rem;
-      background-color: #2196F3;
-      color: white;
       cursor: pointer;
     }
     .link {
       margin-top: 1rem;
-      font-size: 0.9rem;
-      word-break: break-all;
+      font-size: 0.8rem;
+      word-break: break-word;
     }
   </style>
 </head>
 <body>
   <div class="container">
-    <div class="display" id="timer">00:00</div>
+    <div class="display" id="timer">--:--</div>
 
-    <div id="controls">
-      <p>
-        Minutes: <input type="number" id="minutes" value="1" min="1" />
-      </p>
-      <button onclick="startCountdown()">Start & Share</button>
+    <div>
+      <button onclick="togglePause()" id="pauseBtn">▶️ Start</button>
+      <button onclick="resetTimer()">🔄 Reset</button>
+    </div>
+    
+    <div>
+      <input type="number" id="minutes" min="1" value="5" /> min
+      <button onclick="changeDuration()">Set</button>
     </div>
 
     <div class="link" id="share-link"></div>
@@ -65,55 +66,102 @@
 
   <script>
     const timerEl = document.getElementById("timer");
-    const controlsEl = document.getElementById("controls");
+    const pauseBtn = document.getElementById("pauseBtn");
+    const minutesInput = document.getElementById("minutes");
     const shareLinkEl = document.getElementById("share-link");
 
-    let countdownInterval;
+    const params = new URLSearchParams(location.search);
+    const id = params.get("id") || "default";
+    const storageKey = `shared-timer-${id}`;
+    const updateFreq = 500;
 
-    function formatTime(ms) {
-      const totalSeconds = Math.floor(ms / 1000);
-      const mins = String(Math.floor(totalSeconds / 60)).padStart(2, '0');
-      const secs = String(totalSeconds % 60).padStart(2, '0');
-      return `${mins}:${secs}`;
+    let timerData = {
+      duration: 5 * 60 * 1000, // ms
+      endTime: null,
+      paused: true
+    };
+
+    function save() {
+      localStorage.setItem(storageKey, JSON.stringify(timerData));
     }
 
-    function updateCountdown(endTime) {
-      clearInterval(countdownInterval);
-      countdownInterval = setInterval(() => {
-        const now = Date.now();
-        const remaining = endTime - now;
-        if (remaining <= 0) {
-          clearInterval(countdownInterval);
-          timerEl.textContent = "00:00";
-        } else {
-          timerEl.textContent = formatTime(remaining);
-        }
-      }, 250);
-    }
-
-    function startCountdown() {
-      const minutes = parseInt(document.getElementById("minutes").value);
-      if (isNaN(minutes) || minutes <= 0) return alert("Enter valid minutes.");
-
-      const endTime = Date.now() + minutes * 60 * 1000;
-      const url = `${location.origin}${location.pathname}?end=${endTime}`;
-      shareLinkEl.innerHTML = `<strong>Share this link:</strong><br><a href="${url}">${url}</a>`;
-
-      controlsEl.style.display = "none";
-      updateCountdown(endTime);
-    }
-
-    function checkForSharedTimer() {
-      const params = new URLSearchParams(location.search);
-      const end = params.get("end");
-      if (end && !isNaN(end)) {
-        controlsEl.style.display = "none";
-        shareLinkEl.innerHTML = `<strong>Shared timer:</strong><br>⏳`;
-        updateCountdown(Number(end));
+    function load() {
+      const data = localStorage.getItem(storageKey);
+      if (data) {
+        try {
+          timerData = JSON.parse(data);
+        } catch (e) {}
       }
     }
 
-    checkForSharedTimer();
+    function formatTime(ms) {
+      const totalSec = Math.max(0, Math.floor(ms / 1000));
+      const mins = String(Math.floor(totalSec / 60)).padStart(2, '0');
+      const secs = String(totalSec % 60).padStart(2, '0');
+      return `${mins}:${secs}`;
+    }
+
+    function updateDisplay() {
+      load();
+      if (timerData.paused) {
+        const remaining = timerData.endTime ? timerData.endTime - Date.now() : timerData.duration;
+        timerEl.textContent = formatTime(remaining);
+        pauseBtn.textContent = "▶️ Start";
+      } else {
+        const remaining = timerData.endTime - Date.now();
+        if (remaining <= 0) {
+          timerEl.textContent = "00:00";
+          timerData.paused = true;
+          timerData.endTime = null;
+          save();
+        } else {
+          timerEl.textContent = formatTime(remaining);
+        }
+        pauseBtn.textContent = "⏸ Pause";
+      }
+    }
+
+    function togglePause() {
+      load();
+      if (timerData.paused) {
+        // Resume
+        timerData.endTime = Date.now() + (timerData.duration || 0);
+        timerData.paused = false;
+      } else {
+        // Pause
+        const remaining = timerData.endTime - Date.now();
+        timerData.duration = remaining;
+        timerData.endTime = null;
+        timerData.paused = true;
+      }
+      save();
+      updateDisplay();
+    }
+
+    function resetTimer() {
+      const minutes = parseInt(minutesInput.value) || 5;
+      timerData.duration = minutes * 60 * 1000;
+      timerData.endTime = null;
+      timerData.paused = true;
+      save();
+      updateDisplay();
+    }
+
+    function changeDuration() {
+      resetTimer(); // same as reset but keeps the link
+    }
+
+    setInterval(updateDisplay, updateFreq);
+
+    // On load
+    if (!params.get("id")) {
+      const newUrl = `${location.origin}${location.pathname}?id=default`;
+      history.replaceState({}, '', newUrl);
+    }
+
+    shareLinkEl.innerHTML = `<strong>Shareable Link:</strong><br><a href="${location.href}">${location.href}</a>`;
+    load();
+    updateDisplay();
   </script>
 </body>
 </html>
