@@ -50,10 +50,7 @@
         .select('*')
         .eq('id', TIMER_ID)
         .single();
-    
-      console.log('fetchTimer data:', data);
-      console.log('fetchTimer error:', error);
-    
+
       if (data && data.start_at && data.seconds) {
         const start = new Date(data.start_at).getTime();
         endTime = start + data.seconds * 1000;
