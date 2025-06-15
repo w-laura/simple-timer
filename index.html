@@ -3,86 +3,117 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Simple Timer</title>
+  <title>Shared Countdown Timer</title>
   <style>
     body {
-      font-family: Arial, sans-serif;
+      font-family: sans-serif;
       display: flex;
       justify-content: center;
       align-items: center;
       height: 100vh;
       margin: 0;
-      background: #f5f5f5;
+      background: #f0f0f0;
     }
-    .timer-container {
+    .container {
       background: white;
       padding: 2rem;
       border-radius: 1rem;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      box-shadow: 0 0 12px rgba(0,0,0,0.1);
       text-align: center;
+      width: 300px;
     }
     .display {
       font-size: 3rem;
       margin-bottom: 1rem;
     }
-    .buttons button {
-      padding: 0.5rem 1.5rem;
-      margin: 0 0.5rem;
+    input {
+      width: 80px;
+      padding: 0.3rem;
+      font-size: 1rem;
+      text-align: center;
+    }
+    button {
+      padding: 0.5rem 1rem;
+      margin-top: 1rem;
       font-size: 1rem;
       border: none;
       border-radius: 0.5rem;
+      background-color: #2196F3;
+      color: white;
       cursor: pointer;
     }
-    .start { background-color: #4CAF50; color: white; }
-    .pause { background-color: #FF9800; color: white; }
-    .reset { background-color: #F44336; color: white; }
+    .link {
+      margin-top: 1rem;
+      font-size: 0.9rem;
+      word-break: break-all;
+    }
   </style>
 </head>
 <body>
-  <div class="timer-container">
-    <div class="display" id="timer">00:00:00</div>
-    <div class="buttons">
-      <button class="start" onclick="startTimer()">Start</button>
-      <button class="pause" onclick="pauseTimer()">Pause</button>
-      <button class="reset" onclick="resetTimer()">Reset</button>
+  <div class="container">
+    <div class="display" id="timer">00:00</div>
+
+    <div id="controls">
+      <p>
+        Minutes: <input type="number" id="minutes" value="1" min="1" />
+      </p>
+      <button onclick="startCountdown()">Start & Share</button>
     </div>
+
+    <div class="link" id="share-link"></div>
   </div>
 
   <script>
-    let startTime = 0;
-    let elapsedTime = 0;
-    let timerInterval;
-    let running = false;
+    const timerEl = document.getElementById("timer");
+    const controlsEl = document.getElementById("controls");
+    const shareLinkEl = document.getElementById("share-link");
 
-    function timeToString(time) {
-      const hrs = String(Math.floor(time / 3600000)).padStart(2, '0');
-      const mins = String(Math.floor((time % 3600000) / 60000)).padStart(2, '0');
-      const secs = String(Math.floor((time % 60000) / 1000)).padStart(2, '0');
-      return `${hrs}:${mins}:${secs}`;
+    let countdownInterval;
+
+    function formatTime(ms) {
+      const totalSeconds = Math.floor(ms / 1000);
+      const mins = String(Math.floor(totalSeconds / 60)).padStart(2, '0');
+      const secs = String(totalSeconds % 60).padStart(2, '0');
+      return `${mins}:${secs}`;
     }
 
-    function startTimer() {
-      if (running) return;
-      running = true;
-      startTime = Date.now() - elapsedTime;
-      timerInterval = setInterval(() => {
-        elapsedTime = Date.now() - startTime;
-        document.getElementById('timer').textContent = timeToString(elapsedTime);
-      }, 1000);
+    function updateCountdown(endTime) {
+      clearInterval(countdownInterval);
+      countdownInterval = setInterval(() => {
+        const now = Date.now();
+        const remaining = endTime - now;
+        if (remaining <= 0) {
+          clearInterval(countdownInterval);
+          timerEl.textContent = "00:00";
+        } else {
+          timerEl.textContent = formatTime(remaining);
+        }
+      }, 250);
     }
 
-    function pauseTimer() {
-      if (!running) return;
-      running = false;
-      clearInterval(timerInterval);
+    function startCountdown() {
+      const minutes = parseInt(document.getElementById("minutes").value);
+      if (isNaN(minutes) || minutes <= 0) return alert("Enter valid minutes.");
+
+      const endTime = Date.now() + minutes * 60 * 1000;
+      const url = `${location.origin}${location.pathname}?end=${endTime}`;
+      shareLinkEl.innerHTML = `<strong>Share this link:</strong><br><a href="${url}">${url}</a>`;
+
+      controlsEl.style.display = "none";
+      updateCountdown(endTime);
     }
 
-    function resetTimer() {
-      running = false;
-      clearInterval(timerInterval);
-      elapsedTime = 0;
-      document.getElementById('timer').textContent = "00:00:00";
+    function checkForSharedTimer() {
+      const params = new URLSearchParams(location.search);
+      const end = params.get("end");
+      if (end && !isNaN(end)) {
+        controlsEl.style.display = "none";
+        shareLinkEl.innerHTML = `<strong>Shared timer:</strong><br>⏳`;
+        updateCountdown(Number(end));
+      }
     }
+
+    checkForSharedTimer();
   </script>
 </body>
 </html>
