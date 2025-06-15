@@ -5,75 +5,97 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Shared Countdown Timer</title>
   <style>
-    body {
-      font-family: sans-serif;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      height: 100vh;
+    html, body {
       margin: 0;
-      background: #f0f0f0;
+      padding: 0;
+      height: 100%;
+      background-color: black;
+      color: white;
+      font-family: 'Arial', sans-serif;
     }
+
     .container {
-      background: white;
-      padding: 2rem;
-      border-radius: 1rem;
-      box-shadow: 0 0 12px rgba(0,0,0,0.1);
-      text-align: center;
-      width: 300px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      padding: 1rem;
+      box-sizing: border-box;
     }
+
     .display {
-      font-size: 3rem;
-      margin-bottom: 1rem;
-    }
-    input {
-      width: 80px;
-      padding: 0.3rem;
-      font-size: 1rem;
+      font-size: 12vw;
       text-align: center;
+      margin-bottom: 2rem;
     }
-    button {
-      padding: 0.5rem 1rem;
-      margin: 0.3rem;
+
+    .rotated {
+      transform: rotate(90deg);
+      transform-origin: center;
+    }
+
+    button, input {
       font-size: 1rem;
-      border: none;
-      border-radius: 0.5rem;
-      cursor: pointer;
+      padding: 0.5rem 1rem;
+      margin: 0.5rem;
     }
+
+    input[type="number"] {
+      width: 80px;
+    }
+
     .link {
-      margin-top: 1rem;
       font-size: 0.8rem;
+      margin-top: 1rem;
       word-break: break-word;
+      text-align: center;
+      color: lightgray;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    .white-button {
+      background: white;
+      color: black;
+      border: none;
+      border-radius: 0.4rem;
     }
   </style>
 </head>
 <body>
-  <div class="container">
+  <div class="container" id="app">
     <div class="display" id="timer">--:--</div>
 
-    <div>
-      <button onclick="togglePause()" id="pauseBtn">▶️ Start</button>
-      <button onclick="resetTimer()">🔄 Reset</button>
+    <div id="controls">
+      <div>
+        <button onclick="togglePause()" id="pauseBtn" class="white-button">▶️ Start</button>
+        <button onclick="resetTimer()" class="white-button">🔄 Reset</button>
+      </div>
+      <div>
+        <input type="number" id="minutes" min="1" value="5" /> min
+        <button onclick="changeDuration()" class="white-button">Set</button>
+      </div>
+      <div class="link" id="share-link"></div>
     </div>
-    
-    <div>
-      <input type="number" id="minutes" min="1" value="5" /> min
-      <button onclick="changeDuration()">Set</button>
-    </div>
-
-    <div class="link" id="share-link"></div>
   </div>
 
   <script>
+    const params = new URLSearchParams(location.search);
+    const id = params.get("id") || "default";
+    const view = params.get("view");
+    const rotate = params.get("rotate");
+    const storageKey = `shared-timer-${id}`;
+    const isDisplay = view === "display";
+
     const timerEl = document.getElementById("timer");
     const pauseBtn = document.getElementById("pauseBtn");
     const minutesInput = document.getElementById("minutes");
     const shareLinkEl = document.getElementById("share-link");
-
-    const params = new URLSearchParams(location.search);
-    const id = params.get("id") || "default";
-    const storageKey = `shared-timer-${id}`;
-    const updateFreq = 500;
+    const controlsEl = document.getElementById("controls");
+    const appEl = document.getElementById("app");
 
     let timerData = {
       duration: 5 * 60 * 1000, // ms
@@ -106,7 +128,7 @@
       if (timerData.paused) {
         const remaining = timerData.endTime ? timerData.endTime - Date.now() : timerData.duration;
         timerEl.textContent = formatTime(remaining);
-        pauseBtn.textContent = "▶️ Start";
+        if (pauseBtn) pauseBtn.textContent = "▶️ Start";
       } else {
         const remaining = timerData.endTime - Date.now();
         if (remaining <= 0) {
@@ -117,18 +139,16 @@
         } else {
           timerEl.textContent = formatTime(remaining);
         }
-        pauseBtn.textContent = "⏸ Pause";
+        if (pauseBtn) pauseBtn.textContent = "⏸ Pause";
       }
     }
 
     function togglePause() {
       load();
       if (timerData.paused) {
-        // Resume
         timerData.endTime = Date.now() + (timerData.duration || 0);
         timerData.paused = false;
       } else {
-        // Pause
         const remaining = timerData.endTime - Date.now();
         timerData.duration = remaining;
         timerData.endTime = null;
@@ -148,18 +168,28 @@
     }
 
     function changeDuration() {
-      resetTimer(); // same as reset but keeps the link
+      resetTimer(); // same logic
     }
 
-    setInterval(updateDisplay, updateFreq);
-
-    // On load
-    if (!params.get("id")) {
-      const newUrl = `${location.origin}${location.pathname}?id=default`;
-      history.replaceState({}, '', newUrl);
+    function initUI() {
+      if (isDisplay) {
+        controlsEl.classList.add("hidden");
+        if (rotate === "90") {
+          timerEl.classList.add("rotated");
+        }
+      } else {
+        const cleanUrl = `${location.origin}${location.pathname}?id=${id}&view=display`;
+        const rotUrl = cleanUrl + "&rotate=90";
+        shareLinkEl.innerHTML = `
+          <strong>Shareable Display:</strong><br>
+          <a href="${cleanUrl}" style="color:lightblue">${cleanUrl}</a><br>
+          Upright: <a href="${rotUrl}" style="color:lightblue">${rotUrl}</a>
+        `;
+      }
     }
 
-    shareLinkEl.innerHTML = `<strong>Shareable Link:</strong><br><a href="${location.href}">${location.href}</a>`;
+    initUI();
+    setInterval(updateDisplay, 500);
     load();
     updateDisplay();
   </script>
