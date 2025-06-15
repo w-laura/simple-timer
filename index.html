@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Shared Countdown Timer</title>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
   <style>
     body {
       margin: 0;
@@ -47,7 +47,7 @@
     const SUPABASE_URL = 'https://keymiryybvqksaxkjdan.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtleW1pcnl5YnZxa3NheGtqZGFuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTAwMDIyMzUsImV4cCI6MjA2NTU3ODIzNX0.qhDDnLTMGDzNYHA77c9yEHsH8zozECggGwKev4FMzNU';
 
-    const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
     const urlParams = new URLSearchParams(window.location.search);
     const TIMER_ID = urlParams.get('id') || 'default';
