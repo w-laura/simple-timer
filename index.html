@@ -73,6 +73,7 @@
 
     let endTime = null;
     let timerInterval = null;
+    let timerChannel = null;
 
     async function fetchTimer() {
       const { data, error } = await sb
@@ -126,10 +127,34 @@
         updateTimerDisplay();
         if (endTime && Date.now() >= endTime) {
           clearInterval(timerInterval);
+          timerInterval = null;
         }
-      }, 1000);
+      }, 250);
       updateTimerDisplay();
     }
+
+    function subscribeToTimer() {
+      timerChannel = sb.channel(`timer-updates-${TIMER_ID}`)
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'timers',
+            filter: `id=eq.${TIMER_ID}`
+          },
+          () => {
+            fetchTimer();
+          }
+        )
+        .subscribe();
+    }
+
+    window.addEventListener('beforeunload', () => {
+      if (timerChannel) {
+        sb.removeChannel(timerChannel);
+      }
+    });
 
     startBtn.onclick = async () => {
       const minutes = parseInt(minutesInput.value, 10) || 5;
@@ -177,7 +202,7 @@
     };
 
     fetchTimer();
-    setInterval(fetchTimer, 5000); // keep polling for sync
+    subscribeToTimer();
 
     // Hide controls on display-only views unless explicitly requested.
     if (!urlParams.has('controls') && (ROTATE || DISPLAY_ONLY)) {
