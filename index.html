@@ -56,6 +56,7 @@
     const urlParams = new URLSearchParams(window.location.search);
     const TIMER_ID = urlParams.get('id') || 'default';
     const ROTATE = urlParams.get('rotate') === 'true';
+    const DISPLAY_ONLY = urlParams.get('display') === 'true';
 
     if (ROTATE) {
       document.body.style.setProperty('--rotation', '270deg');
@@ -178,8 +179,8 @@
     fetchTimer();
     setInterval(fetchTimer, 5000); // keep polling for sync
 
-    // Hide controls on display-only view (e.g., on remote screen)
-    if (!urlParams.has('controls') && ROTATE) {
+    // Hide controls on display-only views unless explicitly requested.
+    if (!urlParams.has('controls') && (ROTATE || DISPLAY_ONLY)) {
       controlsEl.classList.add('hidden');
     }
   </script>
